@@ -1,0 +1,157 @@
+import random
+
+cuisine_chef_pairs = [
+    (1, 1), (2, 1), (3, 1), (2, 2), (4, 2),
+    (5, 2), (3, 3), (6, 3), (7, 3), (4, 4),
+    (8, 4), (9, 4), (5, 5), (10, 5), (11, 5),
+    (6, 6), (12, 6), (13, 6), (7, 7), (14, 7),
+    (15, 7), (8, 8), (16, 8), (17, 8), (9, 9),
+    (18, 9), (19, 9), (10, 10), (20, 10), (1, 10),
+    (11, 11), (2, 11), (3, 11), (12, 12), (4, 12),
+    (5, 12), (13, 13), (6, 13), (7, 13), (14, 14),
+    (8, 14), (9, 14), (15, 15), (10, 15), (11, 15),
+    (16, 16), (12, 16), (13, 16), (17, 17), (14, 17),
+    (15, 17), (18, 18), (16, 18), (17, 18), (19, 19),
+    (18, 19), (20, 19), (20, 20), (1, 20), (2, 20),
+    (1, 21), (3, 21), (5, 21), (2, 22), (4, 22),
+    (6, 22), (3, 23), (7, 23), (9, 23), (4, 24),
+    (8, 24), (10, 24), (5, 25), (11, 25), (12, 25),
+    (6, 26), (13, 26), (14, 26), (7, 27), (15, 27),
+    (16, 27), (8, 28), (17, 28), (18, 28), (9, 29),
+    (19, 29), (20, 29), (10, 30), (1, 30), (2, 30),
+    (11, 31), (3, 31), (4, 31), (12, 32), (5, 32),
+    (6, 32), (13, 33), (7, 33), (8, 33), (14, 34),
+    (9, 34), (10, 34), (15, 35), (11, 35), (12, 35),
+    (16, 36), (13, 36), (14, 36), (17, 37), (15, 37),
+    (16, 37), (18, 38), (17, 38), (18, 38), (19, 39),
+    (20, 39), (1, 39), (20, 40), (2, 40), (3, 40),
+    (1, 41), (4, 41), (5, 41), (2, 42), (6, 42),
+    (7, 42), (3, 43), (8, 43), (9, 43), (4, 44),
+    (10, 44), (11, 44), (5, 45), (12, 45), (13, 45),
+    (6, 46), (14, 46), (15, 46), (7, 47), (16, 47),
+    (17, 47), (8, 48), (18, 48), (19, 48), (9, 49),
+    (20, 49), (1, 49), (10, 50), (2, 50), (3, 50),
+    (6, 13),(12,4),(13,7),(14,20),(15,40),(19,48),(19,23)
+    
+]
+
+recipe_cuisine_pairs = [
+    (1, 1), (2, 1), (3, 1), (4, 1), (5, 2),
+    (6, 2), (7, 2), (8, 2), (9, 2), (10, 2),
+    (11, 2), (12, 3), (13, 3), (14, 3), (15, 3),
+    (16, 3), (17, 3), (18, 3), (19, 4), (20, 4),
+    (21, 4), (22, 5), (23, 5), (24, 5), (25, 6),
+    (27, 6), (28, 7), (29, 7), (30, 7), (31, 8),
+    (32, 8), (33, 8), (34, 9), (35, 9), (36, 9),
+    (37, 9), (38, 9), (39, 9), (40, 9), (41, 9),
+    (42, 10), (43, 10), (44, 10), (45, 11), (46, 11),
+    (47, 12), (48, 12), (49, 12), (50, 13), (51, 13),
+    (52, 13), (53, 14), (54, 14), (56, 15), (57, 16),
+    (58, 17), (59, 17), (60, 17), (61, 18), (62, 18),
+    (63, 18), (64, 19), (65, 19), (66, 19), (67, 20),
+    (68, 20), (69, 20)
+]
+
+chef_map = {i: set() for i in range(51)}
+
+def generate_recipe_chef_pairs(i):
+
+    random_numbers = random.sample(range(1, 21), 10)
+
+    selected_chefs = []
+    selected_recipes = []
+    recipe_chef = []
+    used_chefs = set()
+
+    for num in random_numbers:
+        while True:
+            random.shuffle(cuisine_chef_pairs)
+            for pair in cuisine_chef_pairs:
+                if pair[0] == num and pair[1] not in used_chefs:
+                    if i-1 not in chef_map[pair[1]] and i-2 not in chef_map[pair[1]]:
+                        selected_chefs.append(pair)
+                        used_chefs.add(pair[1])
+                        chef_map[pair[1]].add(i)
+                        break
+            else:
+                continue  
+            break  
+
+    for num in random_numbers:
+        for pair in recipe_cuisine_pairs:
+            if pair[1] == num:
+                selected_recipes.append(pair)
+                break
+
+    # Generate recipe chef pairs
+    for i in range(10):
+        recipe_chef.append((selected_recipes[i][0], selected_chefs[i][1]))
+
+    return recipe_chef
+    
+recipe_chef_all =[]
+for i in range (1,51):
+    recipe_chef_all.append(generate_recipe_chef_pairs(i))
+    
+ep_rec_chef = []
+for i, rec_chef in enumerate(recipe_chef_all):
+    array = [(i+1, tuple[0],tuple[1]) for tuple in rec_chef]
+    ep_rec_chef.append(array)
+    
+flattened_array = [item for sublist in ep_rec_chef for item in sublist]
+
+output_string_assign = ", ".join(f"({i+1}, {item[0]}, {item[1]}, {item[2]})" for i, item in enumerate(flattened_array))
+
+print("INSERT INTO assignment (AssignmentID,EpisodeID, RecipeID, ChefID) VALUES")   
+print(output_string_assign+ ";")
+
+#############################################################################
+#create judges
+def find_used_chefs(ep_rec_chef, num):
+    used_chefs = set()
+    for episode in ep_rec_chef:
+        for tup in episode:
+            if tup[0] == num:
+                used_chefs.add(tup[2])
+    return used_chefs
+
+judge_ep = []
+
+for num in range(1, 51):
+    used_chefs = find_used_chefs(ep_rec_chef, num)
+    
+    available_chefs = [i for i in range(1, 51) if i not in used_chefs]
+    
+    random_chefs = random.sample(available_chefs, 3) if len(available_chefs) >= 3 else available_chefs
+    
+    judge_ep.append((random_chefs[0],num))
+    judge_ep.append((random_chefs[1],num))
+    judge_ep.append((random_chefs[2],num))    
+    
+    
+output_string_judge = ", ".join(f"({i+1}, {item[0]}, {item[1]})" for i, item in enumerate(judge_ep))
+
+print("INSERT INTO judge (JudjeID, ChefID, EpisodeID) VALUES")
+print(output_string_judge + ";")
+
+###########################################################################3
+#create grades
+import ast
+
+assignments = ast.literal_eval('[' + output_string_assign.replace("'", "") + ']')
+judges = ast.literal_eval('[' + output_string_judge + ']')
+
+
+judge_assignment_pairs = [
+    (random.randint(1, 5),judge[0], assign[0])
+    for judge in judges
+    for assign in assignments
+    if judge[2] == assign[1]
+]
+
+output_string_pairs = ", ".join(f"({i+1},{pair[0]},{pair[1]},{pair[2]})" for i, pair in enumerate(judge_assignment_pairs))
+print("INSERT INTO `grades` (`GradeID`, `Grade`,`JudgeID`, `AssignmentID`) VALUES")
+print(output_string_pairs)
+
+
+

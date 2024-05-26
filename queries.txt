@@ -1,0 +1,320 @@
+--3.1
+
+SELECT 
+    a.ChefID,
+    f.FirstName,
+    f.Surname,
+    c.CuisineID,
+    AVG(g.Grade) AS chef_cuisine_average_rating
+FROM 
+    assignment a
+JOIN chef f on a.chefid=f.chefid 
+JOIN 
+    grades g ON g.assignmentID = a.AssignmentID
+JOIN 
+    recipe r ON a.RecipeID = r.RecipeID
+JOIN 
+    cuisine c ON r.CuisineID = c.CuisineID
+GROUP BY 
+    a.ChefID,
+    f.FirstName,
+    f.Surname,
+    c.CuisineID;
+
+
+--3.2
+SELECT DISTINCT a.Chefid
+FROM chef c
+JOIN specialises s ON c.Chefid = s.Chefid
+JOIN assignment a ON c.Chefid =a.Chefid
+JOIN episode e ON a.Episodeid = e.Episodeid
+WHERE s.cuisineID = :c
+  AND e.Year = :y;
+
+--3.3
+SELECT 
+    c.ChefID,
+    c.FirstName,
+    c.Surname,
+    TIMESTAMPDIFF(YEAR, c.Birthday, CURDATE()) as age,
+    COUNT(ic.recipeID) AS RecipeCount
+FROM 
+    chef c
+JOIN 
+    isabletocook ic ON c.ChefID = ic.ChefID
+WHERE 
+    TIMESTAMPDIFF(YEAR, c.Birthday, CURDATE()) < 30
+GROUP BY 
+    c.ChefID, c.FirstName, c.Surname
+ORDER BY 
+    RecipeCount DESC;
+
+-- 3.4
+SELECT c.*
+FROM chef c
+WHERE c.Chefid NOT IN (SELECT j.Chefid FROM judge j);
+
+
+--3.5
+SELECT j.chefid, e.year, COUNT(*) AS num_episodes
+FROM judge j
+INNER JOIN episode e ON j.episodeid = e.episodeid
+GROUP BY j.chefid, e.Year
+having count(*)>3;
+
+
+--3.6
+
+
+WITH RecipeMealCounts AS (
+    SELECT
+        hl.RecipeID,
+        COUNT(DISTINCT hl.Recipe_labelID) AS MealTypeCount
+    FROM
+        has_label hl
+    GROUP BY
+        hl.RecipeID
+    HAVING
+        MealTypeCount = 2
+),
+
+RecipeEpisodeCounts AS (
+    SELECT
+        a.RecipeID,
+        COUNT(DISTINCT a.EpisodeID) AS EpisodeCount
+    FROM
+        assignment a
+    GROUP BY
+        a.RecipeID
+),
+
+TopRecipes AS (
+    SELECT
+        rmc.RecipeID,
+        rec.EpisodeCount
+    FROM
+        RecipeMealCounts rmc
+    JOIN
+        RecipeEpisodeCounts rec ON rmc.RecipeID = rec.RecipeID
+    ORDER BY
+        rec.EpisodeCount DESC
+    LIMIT 3 
+)
+
+SELECT
+    tr.RecipeID,
+    r.Name AS RecipeName,
+    rl.type_of_meal
+FROM
+    TopRecipes tr
+JOIN
+    has_label hl ON tr.RecipeID = hl.RecipeID
+JOIN
+    recipe_label rl ON hl.Recipe_labelID = rl.Recipe_labelID
+JOIN
+    recipe r ON tr.RecipeID = r.RecipeID
+ORDER BY
+    tr.RecipeID,
+    rl.type_of_meal;
+
+
+
+--3.7
+
+SELECT c.ChefID, c.FirstName, c.Surname, COUNT(a.AssignmentID) AS assignment_count
+FROM chef c
+JOIN assignment a ON c.ChefID = a.ChefID
+GROUP BY c.ChefID, c.FirstName, c.Surname
+HAVING (SELECT COUNT(*) 
+        FROM assignment 
+        GROUP BY ChefID 
+        ORDER BY COUNT(*) DESC 
+        LIMIT 1) - COUNT(a.AssignmentID) >= 5
+ORDER BY assignment_count DESC;
+
+--3.8 
+
+SELECT e.EpisodeID, e.Episode_Number, e.Year, COUNT(r.EquipmentID) AS equipment_count
+FROM episode e
+JOIN assignment a ON e.EpisodeID = a.EpisodeID
+JOIN requires r ON a.RecipeID = r.RecipeID
+GROUP BY e.EpisodeID, e.Episode_Number, e.Year
+ORDER BY equipment_count DESC
+LIMIT 1;
+
+CREATE INDEX index_requires_equipment ON requires (EquipmentID);
+
+
+SELECT e.EpisodeID, COUNT(*) AS equipment_count
+FROM episode e
+JOIN assignment a ON e.EpisodeID = a.EpisodeID
+JOIN requires r USE INDEX (index_requires_equipment) ON a.RecipeID = r.RecipeID
+GROUP BY e.EpisodeID
+ORDER BY equipment_count DESC
+LIMIT 1;
+
+EXPLAIN SELECT e.EpisodeID, COUNT(*) AS equipment_count
+FROM episode e
+JOIN assignment a ON e.EpisodeID = a.EpisodeID
+JOIN requires r USE INDEX (index_requires_equipment) ON a.RecipeID = r.RecipeID
+GROUP BY e.EpisodeID
+ORDER BY equipment_count DESC
+LIMIT 1;
+
+
+
+--3.9
+
+SELECT e.Year, AVG(r.Carbs) AS average_carbs
+FROM episode e
+JOIN assignment a ON e.EpisodeID = a.EpisodeID
+JOIN recipe r ON a.RecipeID = r.RecipeID
+GROUP BY e.Year;
+
+--3.10
+
+WITH CuisineParticipationPerYear AS (
+    SELECT
+        c.CuisineID,
+        YEAR(e.Year) AS ParticipationYear,
+        COUNT(*) AS ParticipationCount
+    FROM
+        assignment a
+    JOIN
+        recipe r ON a.RecipeID = r.RecipeID
+    JOIN
+        cuisine c ON r.CuisineID = c.CuisineID
+    JOIN
+        episode e ON a.EpisodeID = e.EpisodeID
+    GROUP BY
+        c.CuisineID,
+        YEAR(e.Year)
+),
+
+ConsecutiveYearParticipations AS (
+    SELECT
+        c1.CuisineID,
+        c1.ParticipationYear AS Year1,
+        c2.ParticipationYear AS Year2,
+        c1.ParticipationCount
+    FROM
+        CuisineParticipationPerYear c1
+    JOIN
+        CuisineParticipationPerYear c2 ON c1.CuisineID = c2.CuisineID
+            AND c1.ParticipationYear = c2.ParticipationYear - 1
+            AND c1.ParticipationCount = c2.ParticipationCount
+    WHERE
+        c1.ParticipationCount >= 3
+)
+
+SELECT
+    cy.CuisineID,
+    c.Country AS CuisineName,
+    cy.ParticipationCount,
+    cy.Year1,
+    cy.Year2
+FROM
+    ConsecutiveYearParticipations cy
+JOIN
+    cuisine c ON cy.CuisineID = c.CuisineID
+ORDER BY
+    cy.CuisineID,
+    cy.Year1;
+
+
+
+
+--12
+
+WITH EpisodeDifficulty AS (
+    SELECT 
+        e.Year,
+        e.EpisodeID,
+        AVG(r.Difficulty) AS AvgDifficulty,
+        ROW_NUMBER() OVER (PARTITION BY e.Year ORDER BY AVG(r.Difficulty) DESC) AS rn
+    FROM 
+        episode e
+    JOIN 
+        assignment a ON e.EpisodeID = a.EpisodeID
+    JOIN 
+        recipe r ON a.RecipeID = r.RecipeID
+    GROUP BY 
+        e.Year, e.EpisodeID
+)
+SELECT 
+    Year,
+    EpisodeID,
+    AvgDifficulty
+FROM 
+    EpisodeDifficulty
+WHERE 
+    rn = 1
+ORDER BY 
+    Year;
+
+
+--13
+
+SELECT
+    a.EpisodeID,
+    SUM(CASE c.Hierarchy
+            WHEN 'Head Chef' THEN 5
+            WHEN 'Chef Assistant' THEN 4
+            WHEN 'Third Cook' THEN 3
+            WHEN 'Second Cook' THEN 2
+            WHEN 'First Cook' THEN 1
+            ELSE 0
+        END) AS TotalHierarchySum
+FROM
+    assignment a
+JOIN
+    chef c ON a.ChefID = c.ChefID
+GROUP BY
+    a.EpisodeID
+ORDER BY
+    TotalHierarchySum ASC
+LIMIT 1;
+
+
+
+--14
+
+ 
+SELECT 
+    t.ThemeName,
+    COUNT(a.RecipeID) AS ThemeCount
+FROM 
+    assignment a
+JOIN 
+    belongsto b ON a.RecipeID = b.RecipeID
+JOIN 
+    theme t ON b.ThemeID = t.ThemeID
+GROUP BY 
+    t.ThemeName
+ORDER BY 
+    ThemeCount DESC
+LIMIT 1;
+
+
+
+--15
+
+WITH UsedFoodCategories AS (
+    SELECT DISTINCT
+        i.FoodCategoryID
+    FROM
+        assignment a
+    JOIN
+        contains c ON a.RecipeID = c.RecipeID
+    JOIN
+        ingredients i ON c.IngredientsID = i.IngredientsID
+)
+
+SELECT 
+    fc.Name AS FoodCategoryName
+FROM 
+    foodcategory fc
+LEFT JOIN 
+    UsedFoodCategories ufc ON fc.FoodCategoryID = ufc.FoodCategoryID
+WHERE 
+    ufc.FoodCategoryID IS NULL;

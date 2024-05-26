@@ -1,0 +1,245 @@
+-- triggers
+
+
+DELIMITER $$
+
+CREATE OR REPLACE PROCEDURE different_cuisines_in_each_episode(IN vepisodeId INT)
+BEGIN
+    DECLARE count INT;
+
+    SELECT COUNT(*)
+    INTO count
+    FROM (
+        SELECT CuisineID
+        FROM assignment
+        INNER JOIN recipe ON assignment.RecipeID = recipe.RecipeID
+        WHERE assignment.EpisodeID = vepisodeId
+        GROUP BY CuisineID
+        HAVING COUNT(*) > 1
+    ) AS cuisineDuplicates;
+
+    IF (count > 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Each recipe in an episode must be from a different cuisine.';
+    END IF;
+END$$
+
+CREATE  OR REPLACE TRIGGER different_cuisines_in_each_episode_trg
+BEFORE INSERT ON assignment
+FOR EACH ROW
+BEGIN
+    CALL different_cuisines_in_each_episode(NEW.EpisodeID);
+END$$
+
+
+
+CREATE  OR REPLACE TRIGGER assignments_per_episode_trg
+BEFORE INSERT ON `assignment`
+FOR EACH ROW
+BEGIN
+    DECLARE assignment_count INT;
+
+    SELECT COUNT(*)
+    INTO assignment_count
+    FROM `assignment`
+    WHERE `EpisodeID` = NEW.`EpisodeID`;
+
+    IF assignment_count > 10 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Each episode must have 10 assignments.';
+    END IF;
+END $$
+
+
+
+
+CREATE  OR REPLACE TRIGGER `participation_as_chef_or_judge_trg` 
+BEFORE INSERT ON `assignment`
+FOR EACH ROW
+BEGIN
+    DECLARE is_judge INT;
+
+    
+    SELECT COUNT(*)
+    INTO is_judge
+    FROM `judge`
+    WHERE `EpisodeID` = NEW.`EpisodeID`
+      AND `ChefID` = NEW.`ChefID`;
+
+    
+    IF is_judge > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'A chef cannot participate in the same episode as both a judge and a participant in the assignment.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE OR REPLACE PROCEDURE three_grades_for_assignment(IN asID INT)
+BEGIN
+    DECLARE gradeCount INT;
+
+    SELECT COUNT(*)
+    INTO gradeCount
+    FROM grades
+    WHERE AssignmentID = asID;
+
+    IF gradeCount > 3 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Each assignment must have three grades.';
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER three_grades_for_assignment_trg
+AFTER INSERT ON grades
+FOR EACH ROW
+BEGIN
+    CALL three_grades_for_assignment(NEW.AssignmentID);
+END$$
+
+DELIMITER ;
+
+
+
+
+
+DELIMITER $$
+
+CREATE OR REPLACE PROCEDURE one_chef_participation_per_episode(IN VchefId INT, IN VepisodeId INT)
+BEGIN
+    DECLARE assignmentCount INT;
+    DECLARE judgeCount INT;
+
+   
+    SELECT COUNT(*)
+    INTO assignmentCount
+    FROM assignment
+    WHERE ChefID = VchefId AND EpisodeID = VepisodeId;
+
+  
+    SELECT COUNT(*)
+    INTO judgeCount
+    FROM judge
+    WHERE ChefID = VchefId AND EpisodeID = VepisodeId;
+
+   
+    IF (assignmentCount > 0 AND judgeCount > 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Chef cannot be assigned to both a judge and an assignment in the same episode.';
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER one_chef_participation_per_episode_trg
+BEFORE INSERT ON assignment
+FOR EACH ROW
+BEGIN
+    CALL one_chef_participation_per_episode(NEW.ChefID, NEW.EpisodeID);
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER one_judge_participation_per_episode_trg
+BEFORE INSERT ON judge
+FOR EACH ROW
+BEGIN
+    CALL one_chef_participation_per_episode(NEW.ChefID, NEW.EpisodeID);
+END$$
+
+DELIMITER ;
+
+
+
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER cheff_recipe_can_cook_trg
+BEFORE INSERT ON isabletocook
+FOR EACH ROW
+BEGIN
+    
+    DECLARE chef_specializationcuisine INT;
+    DECLARE recipe_cuisinerecipebelongs INT;
+    
+    
+    SELECT CuisineID INTO chef_specializationcuisine FROM specialises WHERE Chefid = NEW.Chefid;
+    
+   
+    SELECT CuisineID INTO recipe_cuisinerecipebelongs FROM recipe WHERE Recipeid = NEW.Recipeid;
+
+    
+    IF chef_specializationcuisine <> recipe_cuisinerecipebelongs THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Chef cannot cook this cuisine';
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER check_consecutive_participation_chef_trg
+AFTER INSERT ON assignment
+FOR EACH ROW
+BEGIN
+    DECLARE consecutive_fl INT;
+
+    SELECT COUNT(*)
+    INTO consecutive_fl
+    FROM episode e1 inner join assignment a1 
+         on a1.Episodeid = e1.Episodeid
+         inner join episode e2 on e1.Episodeid = e2.Episodeid-1
+         inner join assignment a2 on a2.Episodeid = e2.Episodeid
+         inner join episode e3 on e2.Episodeid = e3.Episodeid-1 
+         inner join assignment a3 on a3.Episodeid = e3.Episodeid
+        WHERE a1.Chefid = a2.Chefid 
+          and a1.Chefid = a3.Chefid
+          and a1.Chefid = NEW.Chefid;
+
+    IF consecutive_fl > 1 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Chef cannot participate in more than 3 consecutive episodes';
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE OR REPLACE TRIGGER check_consecutive_participation_judge_trg
+AFTER INSERT ON judge
+FOR EACH ROW
+BEGIN
+    DECLARE consecutive_fl INT;
+
+    SELECT COUNT(*)
+    INTO consecutive_fl
+    FROM episode e1 inner join judge j1 
+         on j1.Episodeid = e1.Episodeid
+         inner join episode e2 on e1.Episodeid = e2.Episodeid-1
+         inner join judge j2 on j2.Episodeid = e2.Episodeid
+         inner join episode e3 on e2.Episodeid = e3.Episodeid-1 
+         inner join judge j3 on j3.Episodeid = e3.Episodeid
+        WHERE j1.Chefid = j2.Chefid 
+          and j1.Chefid = j3.Chefid
+          and j1.Chefid = NEW.Chefid;
+
+    IF consecutive_fl > 1 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Chef cannot participate in more than 3 consecutive episodes';
+    END IF;
+END$$
+
+DELIMITER ;
+
